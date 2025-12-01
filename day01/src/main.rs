@@ -59,7 +59,28 @@ fn part1(input: &Input) -> i64 {
 }
 
 fn part2(input: &Input) -> i64 {
-    0
+    // We get the count of times we point at or pass 0
+    // Start at 50
+    let mut num = 50;
+
+    // No idea why using rem_euclid and div_euclid didn't work, so just count...
+    let mut count_of_zero = 0;
+    for i in input.values.iter() {
+        let abs_i = i.abs();
+        for _j in 0..abs_i {
+            num += i.signum();
+            if num == 0 {
+                count_of_zero += 1;
+            } else if num < 0 {
+                num += 100;
+            } else if num == 100 {
+                num -= 100;
+                count_of_zero += 1;
+            }
+        }
+    }
+
+    count_of_zero
 }
 
 fn parse(file: &str) -> Input {
@@ -147,7 +168,7 @@ mod tests {
         let input = parse(&(env!("CARGO_MANIFEST_DIR").to_owned() + "/src/test1.txt"));
         let result1 = part1(&input);
 
-        assert_eq!(result1, 0);
+        assert_eq!(result1, 3);
     }
 
     #[test]
@@ -155,6 +176,6 @@ mod tests {
         let input = parse(&(env!("CARGO_MANIFEST_DIR").to_owned() + "/src/test1.txt"));
         let result2 = part2(&input);
 
-        assert_eq!(result2, 0);
+        assert_eq!(result2, 6);
     }
 }
