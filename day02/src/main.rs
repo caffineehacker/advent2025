@@ -1,6 +1,7 @@
 use clap::Parser;
 use itertools::Itertools;
 use std::{
+    collections::HashSet,
     fs::File,
     io::{BufRead, BufReader},
 };
@@ -83,7 +84,50 @@ fn part1(input: &Input) -> i64 {
 }
 
 fn part2(input: &Input) -> i64 {
-    0
+    // NOTES:
+    // Now we increment through a set of numbers which can be repeated
+    // We need to keep a history of recorded values to avoid duplicating them
+
+    let mut sum = 0;
+    for (start, end) in input.values.iter() {
+        let start_str = start.to_string();
+        let mut current_length = start_str.len();
+
+        let end_str = end.to_string();
+        let end_length = end_str.len();
+
+        let mut seen = HashSet::new();
+        while current_length <= end_length {
+            for sub_length in 1..=(current_length / 2) {
+                println!("sub_length: {}", sub_length);
+                if current_length % sub_length != 0 {
+                    continue;
+                }
+
+                let mut current_sub_sequence = 10_i64.pow((sub_length as u32) - 1);
+                while current_sub_sequence < 10_i64.pow(sub_length as u32) {
+                    let current_full = current_sub_sequence
+                        .to_string()
+                        .repeat(current_length / sub_length)
+                        .parse::<i64>()
+                        .unwrap();
+
+                    if current_full <= *end
+                        && current_full >= *start
+                        && !seen.contains(&current_full)
+                    {
+                        println!("{}", current_full);
+                        sum += current_full;
+                        seen.insert(current_full);
+                    }
+                    current_sub_sequence += 1;
+                }
+            }
+            current_length += 1;
+        }
+    }
+
+    return sum;
 }
 
 fn parse(file: &str) -> Input {
@@ -181,6 +225,6 @@ mod tests {
         let input = parse(&(env!("CARGO_MANIFEST_DIR").to_owned() + "/src/test1.txt"));
         let result2 = part2(&input);
 
-        assert_eq!(result2, 0);
+        assert_eq!(result2, 4174379265);
     }
 }
