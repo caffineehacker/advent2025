@@ -56,7 +56,24 @@ fn part1(input: &Input) -> i64 {
 }
 
 fn part2(input: &Input) -> i64 {
-    0
+    let mut sum = 0;
+
+    for bank in input.values.iter() {
+        let mut last_index = 0;
+        for i in 0..12 {
+            let to_consider = bank
+                .iter()
+                .skip(last_index)
+                .take(bank.len() - last_index - (11 - i))
+                .collect_vec();
+            let max = **to_consider.iter().max().unwrap();
+            last_index = to_consider.iter().position(|b| **b == max).unwrap() + last_index + 1;
+
+            sum += 10_i64.pow(11 - i as u32) * max;
+        }
+    }
+
+    return sum;
 }
 
 fn parse(file: &str) -> Input {
@@ -153,6 +170,6 @@ mod tests {
         let input = parse(&(env!("CARGO_MANIFEST_DIR").to_owned() + "/src/test1.txt"));
         let result2 = part2(&input);
 
-        assert_eq!(result2, 0);
+        assert_eq!(result2, 3121910778619);
     }
 }
