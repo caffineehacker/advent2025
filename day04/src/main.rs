@@ -85,8 +85,58 @@ fn part1(input: &Input) -> i64 {
     count
 }
 
+fn remove_available(grid: &mut Vec<Vec<Spot>>) -> i64 {
+    let height = grid.len() as i32;
+    let width = grid[0].len() as i32;
+
+    let mut count = 0;
+    for y in 0..height {
+        for x in 0..width {
+            if grid[y as usize][x as usize] == Spot::Empty {
+                continue;
+            }
+            let mut surrounding = 0;
+            for dy in -1..=1 {
+                let effective_y = y as i32 + dy;
+                if effective_y < 0 || effective_y >= height {
+                    continue;
+                }
+
+                for dx in -1..=1 {
+                    let effective_x = x as i32 + dx;
+
+                    if effective_x >= 0 && effective_x < width {
+                        if grid[effective_y as usize][effective_x as usize] == Spot::Roll {
+                            surrounding += 1;
+                        }
+                    }
+                }
+            }
+
+            // The brief is less than 4, but we count ourselves so make it 5
+            if surrounding < 5 {
+                grid[y as usize][x as usize] = Spot::Empty;
+                count += 1;
+            }
+        }
+    }
+
+    count
+}
+
 fn part2(input: &Input) -> i64 {
-    0
+    let mut count_sum = 0;
+    let mut grid = input.values.clone();
+
+    loop {
+        let removed = remove_available(&mut grid);
+        if removed == 0 {
+            break;
+        }
+        count_sum += removed;
+    }
+
+    count_sum
 }
 
 fn parse(file: &str) -> Input {
@@ -183,6 +233,6 @@ mod tests {
         let input = parse(&(env!("CARGO_MANIFEST_DIR").to_owned() + "/src/test1.txt"));
         let result2 = part2(&input);
 
-        assert_eq!(result2, 0);
+        assert_eq!(result2, 43);
     }
 }
