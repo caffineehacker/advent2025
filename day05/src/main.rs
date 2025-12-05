@@ -66,7 +66,31 @@ fn part1(input: &Input) -> i64 {
 }
 
 fn part2(input: &Input) -> i64 {
-    0
+    let fresh_ranges = input.fresh_ranges.iter().sorted().collect_vec();
+
+    let mut last_range: Option<(i64, i64)> = Option::None;
+
+    let mut count = 0;
+    for range in fresh_ranges.iter() {
+        if last_range.is_none() {
+            last_range = Some(**range);
+            continue;
+        }
+
+        let mut_last_range = last_range.as_mut().unwrap();
+        if mut_last_range.1 >= range.0 {
+            if range.1 > mut_last_range.1 {
+                mut_last_range.1 = range.1;
+            }
+        } else {
+            count += (mut_last_range.1 - mut_last_range.0) + 1;
+            last_range = Some(**range);
+        }
+    }
+
+    count += (last_range.unwrap().1 - last_range.unwrap().0) + 1;
+
+    count
 }
 
 fn parse(file: &str) -> Input {
@@ -169,6 +193,6 @@ mod tests {
         let input = parse(&(env!("CARGO_MANIFEST_DIR").to_owned() + "/src/test1.txt"));
         let result2 = part2(&input);
 
-        assert_eq!(result2, 0);
+        assert_eq!(result2, 14);
     }
 }
