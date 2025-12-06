@@ -26,6 +26,11 @@ struct Input {
     operations: Vec<char>,
 }
 
+#[derive(Debug, Clone, Hash)]
+struct Input2 {
+    problems: Vec<(Vec<i64>, char)>,
+}
+
 fn main() {
     let args = Args::parse();
     let data_file = if args.data_file.is_empty() {
@@ -35,11 +40,12 @@ fn main() {
     };
 
     let input = parse(&data_file);
+    let input2 = parse2(&data_file);
 
     let result1 = part1(&input);
     println!("Part1: {}", result1);
 
-    println!("Part 2: {}", part2(&input))
+    println!("Part 2: {}", part2(&input2))
 }
 
 fn part1(input: &Input) -> i64 {
@@ -68,8 +74,21 @@ fn part1(input: &Input) -> i64 {
     sum
 }
 
-fn part2(input: &Input) -> i64 {
-    0
+fn part2(input: &Input2) -> i64 {
+    let mut sum = 0;
+    for problem in input.problems.iter() {
+        let numbers = &problem.0;
+
+        let operation = problem.1;
+
+        if operation == '+' {
+            sum += numbers.into_iter().cloned().sum::<i64>();
+        } else if operation == '*' {
+            sum += numbers.into_iter().cloned().reduce(|a, b| a * b).unwrap();
+        }
+    }
+
+    sum
 }
 
 fn parse(file: &str) -> Input {
@@ -97,63 +116,47 @@ fn parse(file: &str) -> Input {
             .map(|v| v.chars().take(1).last().unwrap())
             .collect_vec(),
     }
+}
 
-    /*
-     * Alternative implementations:
-     */
+fn parse2(file: &str) -> Input2 {
+    let file = File::open(file).expect("Failed to open file");
+    let reader = BufReader::new(file);
+    let lines: Vec<Vec<char>> = reader
+        .lines()
+        .map(|line| line.expect("Failed to read line").chars().collect_vec())
+        .collect();
 
-    // Two sections separated by a newline
-    // Input {
-    //     first: lines
-    //         .iter()
-    //         .take_while(|line| !line.is_empty())
-    //         .map(|line| line.split_once('|').unwrap())
-    //         .map(|(a, b)| (a.parse::<i64>().unwrap(), b.parse::<i64>().unwrap()))
-    //         .collect_vec(),
-    //     second: lines
-    //         .iter()
-    //         .skip_while(|line| !line.is_empty())
-    //         .filter(|line| !line.is_empty())
-    //         .map(|line| {
-    //             line.split(',')
-    //                 .map(|page| page.parse::<i64>().unwrap())
-    //                 .collect_vec()
-    //         })
-    //         .collect_vec(),
-    // }
+    let number_rows = lines.len() - 1;
 
-    // Creates a HashMap<char, Vec<Position>>
-    // let map_limits = Position {
-    //     x: lines[0].len() as i64,
-    //     y: lines.len() as i64,
-    // };
+    let mut problems = Vec::new();
+    // White space maters here, the last line is the easiest to find the end / start of the next set of numbers
+    let mut index = lines[0].len() - 1;
+    let mut current_section = Vec::new();
+    loop {
+        let mut current_column = 0;
+        for row in 0..number_rows {
+            if lines[row][index] != ' ' {
+                current_column = current_column * 10;
+                current_column += lines[row][index].to_string().parse::<i64>().unwrap();
+            }
+        }
 
-    // Input {
-    //     antennas: lines
-    //         .into_iter()
-    //         .enumerate()
-    //         .flat_map(|(y, line)| {
-    //             line.chars()
-    //                 .enumerate()
-    //                 .filter(|(_, c)| *c != '.')
-    //                 .map(|(x, c)| {
-    //                     (
-    //                         c,
-    //                         Position {
-    //                             x: x as i64,
-    //                             y: y as i64,
-    //                         },
-    //                     )
-    //                 })
-    //                 .collect_vec()
-    //         })
-    //         .sorted_by(|(a, _), (b, _)| Ord::cmp(a, b))
-    //         .chunk_by(|(c, _)| *c)
-    //         .into_iter()
-    //         .map(|(c, positions)| (c, positions.map(|(_, p)| p).collect_vec()))
-    //         .collect(),
-    //     map_limits,
-    // }
+        if current_column > 0 {
+            current_section.push(current_column);
+        }
+
+        if lines[number_rows][index] != ' ' {
+            problems.push((current_section, lines[number_rows][index]));
+            current_section = Vec::new();
+        }
+
+        if index == 0 {
+            break;
+        }
+        index -= 1;
+    }
+
+    Input2 { problems: problems }
 }
 
 #[cfg(test)]
@@ -170,9 +173,9 @@ mod tests {
 
     #[test]
     fn test_part2() {
-        let input = parse(&(env!("CARGO_MANIFEST_DIR").to_owned() + "/src/test1.txt"));
+        let input = parse2(&(env!("CARGO_MANIFEST_DIR").to_owned() + "/src/test1.txt"));
         let result2 = part2(&input);
 
-        assert_eq!(result2, 0);
+        assert_eq!(result2, 3263827);
     }
 }
