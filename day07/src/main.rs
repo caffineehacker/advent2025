@@ -2,7 +2,7 @@ use clap::Parser;
 use itertools::Itertools;
 use std::{
     cell,
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     fs::File,
     io::{BufRead, BufReader},
 };
@@ -79,8 +79,35 @@ fn part1(input: &Input) -> i64 {
     splits
 }
 
+fn get_world_count(
+    point: (usize, usize),
+    input: &Input,
+    points_processed: &mut HashMap<(usize, usize), i64>,
+) -> i64 {
+    if point.1 == input.values.len() {
+        return 1;
+    }
+
+    if let Some(worlds) = points_processed.get(&point) {
+        return *worlds;
+    }
+
+    if input.values[point.1][point.0] == '^' {
+        let worlds = get_world_count((point.0 - 1, point.1 + 1), input, points_processed)
+            + get_world_count((point.0 + 1, point.1 + 1), input, points_processed);
+        points_processed.insert(point, worlds);
+        return worlds;
+    }
+
+    return get_world_count((point.0, point.1 + 1), input, points_processed);
+}
+
 fn part2(input: &Input) -> i64 {
-    0
+    // S is the start of the beam on the first line
+    let start: (usize, usize) = (input.values[0].iter().position(|c| *c == 'S').unwrap(), 0);
+    let mut points_processed = HashMap::new();
+
+    return get_world_count(start, input, &mut points_processed);
 }
 
 fn parse(file: &str) -> Input {
@@ -173,6 +200,6 @@ mod tests {
         let input = parse(&(env!("CARGO_MANIFEST_DIR").to_owned() + "/src/test1.txt"));
         let result2 = part2(&input);
 
-        assert_eq!(result2, 0);
+        assert_eq!(result2, 40);
     }
 }
