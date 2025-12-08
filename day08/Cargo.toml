@@ -1,0 +1,10 @@
+[package]
+name = "day08"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+clap = { version = "*", features = ["derive"] }
+indicatif = "*"
+itertools = "*"
+regex = "*"
