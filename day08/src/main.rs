@@ -70,7 +70,7 @@ fn part1(input: &Input, iterations: i64) -> i64 {
         .sorted_by(f64::total_cmp)
         .take(iterations as usize)
     {
-        let points = distances.iter().find(|(p, d)| **d == distance).unwrap().0;
+        let points = distances.iter().find(|(_p, d)| **d == distance).unwrap().0;
         let point_a = points.0;
         let point_b = points.1;
 
@@ -112,6 +112,61 @@ fn part1(input: &Input, iterations: i64) -> i64 {
 }
 
 fn part2(input: &Input) -> i64 {
+    // Same as part 1, but keep going until everything is in one circuit
+
+    let mut circuits: Vec<Vec<Position>> = Vec::new();
+
+    // Step 1: Find distances between all points
+    let mut distances: HashMap<(Position, Position), f64> = HashMap::new();
+
+    for i in 0..(input.values.len() - 1) {
+        for j in (i + 1)..input.values.len() {
+            let a = input.values[i];
+            let b = input.values[j];
+            let distance =
+                (((a.x - b.x).pow(2) + (a.y - b.y).pow(2) + (a.z - b.z).pow(2)) as f64).sqrt();
+            distances.insert((a, b), distance as f64);
+        }
+    }
+
+    for distance in distances.values().cloned().sorted_by(f64::total_cmp) {
+        let points = distances.iter().find(|(_p, d)| **d == distance).unwrap().0;
+        let point_a = points.0;
+        let point_b = points.1;
+
+        let circuit_a = circuits
+            .iter()
+            .find_position(|c| c.iter().any(|p| *p == point_a))
+            .map(|p| p.0);
+        let circuit_b = circuits
+            .iter()
+            .find_position(|c| c.iter().any(|p| *p == point_b))
+            .map(|p| p.0);
+
+        if circuit_a.is_none() && circuit_b.is_none() {
+            circuits.push(vec![point_a, point_b]);
+        } else if circuit_a.is_none() {
+            circuits[circuit_b.unwrap()].push(point_a);
+        } else if circuit_b.is_none() {
+            circuits[circuit_a.unwrap()].push(point_b);
+        } else {
+            // Both are populated so we need to merge the circuits. This leaves the circuit in the vec, but it'll be empty
+            let to_remove = circuit_a.unwrap().max(circuit_b.unwrap());
+            let to_update = circuit_a.unwrap().min(circuit_b.unwrap());
+            if to_remove != to_update {
+                let mut removed_circuit = circuits.remove(to_remove);
+                circuits
+                    .get_mut(to_update)
+                    .unwrap()
+                    .append(&mut removed_circuit);
+            }
+        }
+
+        if circuits.len() == 1 && circuits[0].len() == input.values.len() {
+            return point_a.x * point_b.x;
+        }
+    }
+
     0
 }
 
@@ -211,6 +266,6 @@ mod tests {
         let input = parse(&(env!("CARGO_MANIFEST_DIR").to_owned() + "/src/test1.txt"));
         let result2 = part2(&input);
 
-        assert_eq!(result2, 0);
+        assert_eq!(result2, 25272);
     }
 }
