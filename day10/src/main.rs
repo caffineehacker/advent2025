@@ -1,10 +1,16 @@
 use clap::Parser;
 use itertools::Itertools;
+use rayon::prelude::*;
+use std::cmp::Ordering;
+use std::collections::HashMap;
 use std::{
-    collections::{HashSet, VecDeque},
+    collections::{BinaryHeap, HashSet, VecDeque},
+    fmt::format,
     fs::File,
     io::{BufRead, BufReader},
 };
+use z3::ast::Int;
+use z3::{Optimize, Solver};
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -31,6 +37,7 @@ struct Machine {
     lights_count: i64,
     target: Vec<bool>,
     buttons: Vec<Button>,
+    joltage_target: Vec<i64>,
 }
 
 #[derive(Debug, Clone, Hash)]
@@ -54,7 +61,7 @@ fn main() {
     println!("Part 2: {}", part2(&input))
 }
 
-fn get_machine_presses(machine: &Machine) -> i64 {
+fn get_machine_presses_part1(machine: &Machine) -> i64 {
     let mut seen_states = HashSet::new();
     let mut states_to_process = VecDeque::new();
     let mut starting_state = Vec::new();
@@ -86,14 +93,170 @@ fn part1(input: &Input) -> i64 {
     let mut sum = 0;
 
     for machine in input.values.iter() {
-        sum += get_machine_presses(machine);
+        sum += get_machine_presses_part1(machine);
     }
 
     sum
 }
 
+fn get_machine_presses_part2(machine: &Machine) -> i64 {
+    // This is not an optimal solution, but it should run in less than half an hour
+    let mut seen_states = HashSet::new();
+    let mut states_to_process = VecDeque::new();
+    let mut starting_state = Vec::new();
+    starting_state.resize(machine.joltage_target.len(), 0);
+    states_to_process.push_back((0, starting_state));
+    let progress = indicatif::ProgressBar::new_spinner();
+    let target_indexes_in_increasing_order = machine
+        .joltage_target
+        .iter()
+        .enumerate()
+        .sorted_by_key(|(_index, target)| **target)
+        .map(|(index, _)| index)
+        .collect_vec();
+
+    loop {
+        let (moves, start) = states_to_process.pop_front().unwrap();
+        if seen_states.contains(&start) {
+            continue;
+        }
+        seen_states.insert(start.clone());
+        progress.set_message(format!(
+            "{:?}: {:?}   {} left",
+            machine.joltage_target,
+            start,
+            states_to_process.len()
+        ));
+
+        if machine.joltage_target == start {
+            return moves;
+        }
+
+        // See if we can multiply this to get to the end
+        if start[0] > 0 && machine.joltage_target[0] % start[0] == 0 {
+            let divisor = machine.joltage_target[0] / start[0];
+            let mut is_multipliable = true;
+            for i in 1..machine.joltage_target.len() {
+                if start[i] == 0
+                    || machine.joltage_target[i] % start[i] != 0
+                    || machine.joltage_target[i] / start[i] != divisor
+                {
+                    is_multipliable = false;
+                    break;
+                }
+            }
+
+            if is_multipliable {
+                let total_moves = moves * divisor;
+                return total_moves;
+            }
+        }
+
+        for i in target_indexes_in_increasing_order.iter().cloned() {
+            if start[i] != machine.joltage_target[i] {
+                for button in machine.buttons.iter() {
+                    if !button.light_indexes.contains(&i) {
+                        continue;
+                    }
+                    let mut modified = start.clone();
+                    let mut is_valid = true;
+                    for light in button.light_indexes.iter() {
+                        modified[*light] += 1;
+                        if modified[*light] > machine.joltage_target[*light] {
+                            is_valid = false;
+                            break;
+                        }
+                    }
+                    if is_valid {
+                        states_to_process.push_back(((moves + 1), modified));
+                    }
+                }
+                break;
+            }
+        }
+    }
+}
+
+#[derive(Clone, Eq, PartialEq)]
+struct State {
+    best_case_total_cost: i64,
+    cost: i64,
+    indicators: Vec<i64>,
+}
+
+// The priority queue depends on `Ord`.
+// Explicitly implement the trait so the queue becomes a min-heap
+// instead of a max-heap.
+impl Ord for State {
+    fn cmp(&self, other: &Self) -> Ordering {
+        // Notice that we flip the ordering on costs.
+        // In case of a tie we compare positions - this step is necessary
+        // to make implementations of `PartialEq` and `Ord` consistent.
+        other
+            .best_case_total_cost
+            .cmp(&self.best_case_total_cost)
+            .then_with(|| self.cost.cmp(&other.cost))
+            .then_with(|| self.indicators.cmp(&other.indicators))
+    }
+}
+
+// `PartialOrd` needs to be implemented as well.
+impl PartialOrd for State {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+fn get_machine_presses_part2_optimized(machine: &Machine) -> i64 {
+    // Let's use z3
+    let solver = Optimize::new();
+
+    // One int for each button
+    let button_ints = machine
+        .buttons
+        .iter()
+        .enumerate()
+        .map(|(i, button)| (button, Int::new_const("btn".to_string() + &i.to_string())))
+        .collect_vec();
+
+    let mut buttons_sum: Int = button_ints[0].1.clone();
+    for i in 1..button_ints.len() {
+        buttons_sum = buttons_sum + &button_ints[i].1;
+    }
+    solver.minimize(&buttons_sum);
+    for button in button_ints.iter() {
+        solver.assert(&button.1.ge(0));
+    }
+
+    for indicator in 0..machine.joltage_target.len() {
+        let buttons_involved = button_ints
+            .iter()
+            .filter(|(b, _i)| b.light_indexes.contains(&indicator))
+            .map(|b| &b.1)
+            .collect_vec();
+        if buttons_involved.is_empty() {
+            println!("Unexpected!");
+            continue;
+        }
+
+        let mut total: Int = buttons_involved[0].clone();
+        for i in 1..buttons_involved.len() {
+            total = total + buttons_involved[i];
+        }
+        solver.assert(&total.eq(machine.joltage_target[indicator]));
+    }
+    solver.check(&[]);
+    let model = solver.get_model().unwrap();
+
+    model.eval(&buttons_sum, true).unwrap().as_i64().unwrap()
+}
+
 fn part2(input: &Input) -> i64 {
-    0
+    input
+        .values
+        .iter()
+        .map(|machine| get_machine_presses_part2_optimized(machine))
+        .sum::<i64>()
 }
 
 fn parse(file: &str) -> Input {
@@ -128,11 +291,20 @@ fn parse(file: &str) -> Input {
                             .collect_vec(),
                     });
                 }
+                let joltage_target = parts
+                    .last()
+                    .unwrap()
+                    .trim_start_matches("{")
+                    .trim_end_matches("}")
+                    .split(",")
+                    .map(|j| j.parse::<i64>().unwrap())
+                    .collect_vec();
 
                 Machine {
                     lights_count: target.len() as i64,
                     target,
                     buttons,
+                    joltage_target,
                 }
             })
             .collect_vec(),
@@ -213,6 +385,6 @@ mod tests {
         let input = parse(&(env!("CARGO_MANIFEST_DIR").to_owned() + "/src/test1.txt"));
         let result2 = part2(&input);
 
-        assert_eq!(result2, 0);
+        assert_eq!(result2, 33);
     }
 }
